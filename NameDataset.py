@@ -2,7 +2,6 @@ import os
 
 from torch.utils.data import Dataset
 
-
 class NameDataSet(Dataset):
     def __init__(self):
         self.labels = []
