@@ -15,7 +15,7 @@ HIDDEN_SIZE = 100
 BATCH_SIZE = 256
 N_LAYER = 2  # RNN的层数
 N_EPOCHS = 100
-N_CHARS = 128  # ASCII码的个数
+N_CHARS = 400  # ASCII码的个数
 USE_GPU = False
 
 # 2.数据集相关
@@ -59,7 +59,7 @@ class GRUClassifier(torch.nn.Module):
 
         # 词嵌入层,将词语映射到hidden维度
         # 特征处理，将稀疏高维向量变成连续的稠密表示作为隐藏层的输入
-        self.embedding = torch.nn.Embedding(400, hidden_size)
+        self.embedding = torch.nn.Embedding(input_size, hidden_size)
         # GRU层(输入为特征数，这里是embedding_size,其大小等于hidden_size))
         self.gru = torch.nn.GRU(hidden_size, hidden_size, num_layers=n_layers,
                                 bidirectional=bidirectional)
@@ -127,22 +127,21 @@ def make_tensors(names, countries):
     return create_tensor(seq_tensor), create_tensor(seq_lengths), create_tensor(countries)
 
 
-mx = 0
-
-
 # 训练循环
 def train(epoch, start):
-    global mx
     total_loss = 0
     for i, (names, countries) in enumerate(train_loader, 1):
+        # 将数据进行处理
         inputs, seq_lengths, target = make_tensors(names, countries)
-        mx = max(inputs.max().item(), mx)
+        # 前向传播，获取输出
         output = model(inputs, seq_lengths)
+        # 计算损失
         loss = criterion(output, target)
+        # 后向传播
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        # 统计损失
         total_loss += loss.item()
         if i % 10 == 0:
             print(f'[{timesince(start)}] Epoch {epoch} ', end='')
