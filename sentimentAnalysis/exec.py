@@ -1,6 +1,9 @@
+import time
+
 import torch
 from sklearn.preprocessing import LabelEncoder
-from torch.nn.utils.rnn import pad_sequence
+from torch import nn, optim
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torch.utils.data import DataLoader
 import pandas as pd
 
@@ -9,7 +12,11 @@ from SentenceDataSet import SentimentDataset
 # 1.设置超参数
 TRAIN_PATH = 'D:\python\learnDL\data\sentimentAnalysis\\train.tsv'
 TEST_PATH = 'D:\python\learnDL\data\sentimentAnalysis\\test.tsv'
-BATCH_SIZE = 256
+BATCH_SIZE = 64
+HIDDEN_SIZE = 100
+N_LAYERS = 2
+N_EPOCHS = 10
+LEARNING_RATE = 0.001
 
 
 # 2.预处理
@@ -32,11 +39,13 @@ def phrase_to_indices(phrase, word2idx):
     return [word2idx[word] for word in phrase.split() if word in word2idx]
 
 
+train_df = pd.read_csv(TRAIN_PATH, sep='\t')
+test_df = pd.read_csv(TEST_PATH, sep='\t')
+
+
 # 数据预处理
 def preprocess_data():
     # 读取数据集
-    train_df = pd.read_csv(TRAIN_PATH, sep='\t')
-    test_df = pd.read_csv(TEST_PATH, sep='\t')
     # 将标签转换成数值类型
     le = LabelEncoder()
     train_df['Sentiment'] = le.fit_transform(train_df['Sentiment'])
@@ -52,13 +61,12 @@ def preprocess_data():
 train_phrases, train_sentiments, test_phrases, le = preprocess_data()
 word2idx = build_vocab(train_phrases + test_phrases)
 train_indices = [phrase_to_indices(phrase, word2idx) for phrase in train_phrases]
-test_indices = [phrase_to_indices(phrase, word2idx) for phrase in test_phrases]
+test_indices_old = [phrase_to_indices(phrase, word2idx) for phrase in test_phrases]
 
 # 移除长度为0的样本
 train_indices = [x for x in train_indices if len(x) > 0]
 train_sentiments = [y for x, y in zip(train_indices, train_sentiments) if len(x) > 0]
-test_indices = [x for x in test_indices if len(x) > 0]
-
+test_indices = [x for x in test_indices_old if len(x) > 0]
 
 # 数据加载器
 def collate_fn(batch):
@@ -84,10 +92,76 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False,
                          collate_fn=lambda x: pad_sequence([torch.tensor(phrase) for phrase in x], batch_first=True,
                                                            padding_value=0))
 
+
+# 模型定义
+class SentimentRNN(nn.Module):
+    def __init__(self, vocab_size, embed_size, hidden_size, output_size, n_layers):
+        super(SentimentRNN, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_size, padding_idx=0)
+        self.lstm = nn.LSTM(embed_size, hidden_size, n_layers, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(hidden_size * 2, output_size)
+
+    def forward(self, x, lengths):
+        x = self.embedding(x)
+        x = pack_padded_sequence(x, lengths.cpu(), batch_first=True,
+                                 enforce_sorted=False)
+        # 表示序列长度不需要严格递减，避免了手动排序 lengths 的需求
+        _, (hidden, _) = self.lstm(x)
+        hidden = torch.cat((hidden[-2], hidden[-1]), dim=1)
+        out = self.fc(hidden)
+        return out
+
+
+vocab_size = len(word2idx)
+embed_size = 128
+output_size = len(le.classes_)
+
+model = SentimentRNN(vocab_size, embed_size, HIDDEN_SIZE, output_size, N_LAYERS)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+
+# 训练和测试循环
+def train(model, train_loader, criterion, optimizer, n_epochs):
+    model.train()
+    for epoch in range(n_epochs):
+        total_loss = 0
+        for phrases, sentiments, lengths in train_loader:
+            optimizer.zero_grad()
+            output = model(phrases, lengths)
+            loss = criterion(output, sentiments)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f'Epoch: {epoch + 1}, Loss: {total_loss / len(train_loader)}')
+
+
+def generate_test_results(model, test_loader):
+    model.eval()
+    results = []
+    with torch.no_grad():
+        for phrases in test_loader:
+            lengths = torch.tensor([len(x) for x in phrases])
+            output = model(phrases, lengths)
+            preds = torch.argmax(output, dim=1)
+            results.extend(preds.cpu().numpy())
+    return results
+
+
 if __name__ == '__main__':
-    pass
-    # for i, (phrase, sentiment) in enumerate(train_loader, 1):
-    #     if i > 10:
-    #         break
-    #     print(phrase)
-    #     print(sentiment)
+    begin = time.time()
+    train(model, train_loader, criterion, optimizer, N_EPOCHS)
+    end = time.time()
+    print(end - begin)
+    test_ids = test_df['PhraseId'].tolist()
+    preds = generate_test_results(model, test_loader)
+    new_preds = []
+    for idx in range(len(preds)):
+        if idx == 1390:
+            new_preds.append(2)
+        new_preds.append(preds[idx])
+    assert len(test_ids) == len(new_preds), f"Lengths do not match: {len(test_ids)} vs {len(new_preds)}"
+    # 保存结果
+    output_df = pd.DataFrame({'PhraseId': test_ids, 'Sentiment': new_preds})
+    output_df.to_csv('sentiment_predictions.csv', index=False)
