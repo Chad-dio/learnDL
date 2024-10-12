@@ -105,7 +105,7 @@ class SentimentRNN(nn.Module):
         x = self.embedding(x)
         x = pack_padded_sequence(x, lengths.cpu(), batch_first=True,
                                  enforce_sorted=False)
-        # 表示序列长度不需要严格递减，避免了手动排序 lengths 的需求
+        # 网络的输出一定要参考官方文档怎么说的，而不是自己猜想，官网都有
         _, (hidden, _) = self.lstm(x)
         hidden = torch.cat((hidden[-2], hidden[-1]), dim=1)
         out = self.fc(hidden)
@@ -124,7 +124,11 @@ optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 # 训练和测试循环
 def train(model, train_loader, criterion, optimizer, n_epochs):
-    model.train()
+    model.train() # 开启训练模式
+    # 开启了dropout层
+    # BatchNorm：
+    # 在训练时，会根据当前批次的均值和标准差进行数据的归一化处理，并更新整个数据集的均值和标准差的估计值
+    # 在测试时，会使用训练时估计的均值和标准差对数据进行归一化
     for epoch in range(n_epochs):
         total_loss = 0
         for phrases, sentiments, lengths in train_loader:
@@ -151,16 +155,19 @@ def generate_test_results(model, test_loader):
 
 if __name__ == '__main__':
     begin = time.time()
+    # 模型训练
     train(model, train_loader, criterion, optimizer, N_EPOCHS)
     end = time.time()
-    print(end - begin)
+    print(end - begin) # 总消耗时间
     test_ids = test_df['PhraseId'].tolist()
     preds = generate_test_results(model, test_loader)
     new_preds = []
+    # 有一条数据为空，被预处理清掉了，所以最后的输出相较于原始数据集少一条，这里补上
     for idx in range(len(preds)):
         if idx == 1390:
             new_preds.append(2)
         new_preds.append(preds[idx])
+    # df输出需要保证行数相等才能输出表格，做一个断言
     assert len(test_ids) == len(new_preds), f"Lengths do not match: {len(test_ids)} vs {len(new_preds)}"
     # 保存结果
     output_df = pd.DataFrame({'PhraseId': test_ids, 'Sentiment': new_preds})
