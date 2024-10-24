@@ -69,23 +69,23 @@ class MultiHeadAttentionByIID(nn.Module):
 
         return attn, output
 
-
 class LinearFeatureLearner(nn.Module):
     def __init__(self, input_size, output_size):
         super(LinearFeatureLearner, self).__init__()
-        # 定义一个线性层，将input_size 映射到 output_size
+        # 继续扩展
         self.linear = nn.Linear(input_size, output_size)
 
     def forward(self, x):
         # 执行线性变换
         return self.linear(x)
 
-enciid = MultiHeadAttention()
+enciid = MultiHeadAttentionByIID()
 layer_input = LinearFeatureLearner(input_size, output_size)
 
 def packg(input_data):
+    enciid(input_data) # 扩散数据信息空间
     output_new = layer_input(input_data)
-
+    return output_new
 
 
 if __name__ == "__main__":
