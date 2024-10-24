@@ -228,7 +228,8 @@ class Decoder(nn.Module):
         # 两个矩阵相加，大于0的为1，不大于0的为0，为1的在之后就会被fill到无限小
         dec_self_attn_mask = torch.gt((dec_self_attn_pad_mask + dec_self_attn_subsequent_mask), 0)
 
-        # 这个做的是交互注意力机制中的mask矩阵，enc的输入是k，我去看这个k里面哪些是pad符号，给到后面的模型；注意哦，我q肯定也是有pad符号，但是这里我不在意的，之前说了好多次了哈
+        # 这个做的是交互注意力机制中的mask矩阵，enc的输入是k，我去看这个k里面哪些是pad符号，给到后面的模型；
+        # 注意哦，我q肯定也是有pad符号，但是这里我不在意的，之前说了好多次了哈
         dec_enc_attn_mask = get_attn_pad_mask(dec_inputs, enc_inputs)
 
         dec_self_attns, dec_enc_attns = [], []
