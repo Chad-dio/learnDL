@@ -80,6 +80,13 @@ class LinearFeatureLearner(nn.Module):
         # 执行线性变换
         return self.linear(x)
 
+enciid = MultiHeadAttention()
+layer_input = LinearFeatureLearner(input_size, output_size)
+
+def packg(input_data):
+    output_new = layer_input(input_data)
+
+
 
 if __name__ == "__main__":
     for epoch in range(num_epochs): # 512轮
